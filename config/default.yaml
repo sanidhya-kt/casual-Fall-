@@ -1,0 +1,28 @@
+# Default configuration for CausalFall replication
+model:
+  name: "CausalFall"
+  num_channels: 9          # C = 9 (Acc, Gyro, Mag/Ori)
+  window_size: 72          # delta = 72 (from Sec 5.2.3 experimental setup)
+  prediction_horizon: 15   # theta = 15
+  num_heads: 9             # H = 9 attention heads
+  num_mha_layers: 3        # 3 MHA layers in STAE
+  dim_feedforward: 16      # feedforward dimension = 16
+  reduced_dim: 4           # Gamma in State Decoder (Gamma < C)
+  dropout: 0.1             # standard dropout
+  pe_base: 10000.0         # base for sinusoidal positional embedding
+
+training:
+  batch_size: 128          # [PAPER SPECIFICATION] Sec 5.2.3: 128
+  epochs: 500              # [PAPER SPECIFICATION] Sec 5.2.3: 500
+  learning_rate: 0.001     # [PAPER SPECIFICATION] Sec 5.2.3: 1e-3
+  optimizer: "Adam"        # [PAPER SPECIFICATION] Sec 5.2.3: Adam
+  random_seed: 42
+  train_ratio: 0.8         # 80/20 train/test split
+  device: "auto"           # auto-selects cuda, mps, or cpu
+
+causal:
+  max_lag: 15              # lag order <= theta = 15
+  threshold: 1.0           # E = M_GC if M_GC > 1.0 else 0
+
+counterfactual:
+  mask_type: "zero"        # "zero", "mean", "random", "none"

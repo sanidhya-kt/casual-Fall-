@@ -1,0 +1,27 @@
+# Configuration for SisFall dataset
+dataset:
+  name: "SisFall"
+  root_dir: "./datasets/raw/SisFall"
+  orig_sr: 200
+  target_sr: 25
+  num_channels: 9
+  acc_indices: [0, 1, 2]
+  gyro_indices: [3, 4, 5]
+  acc2_indices: [6, 7, 8]
+
+model:
+  num_channels: 9
+  window_size: 72
+  prediction_horizon: 15
+  num_heads: 9
+  num_mha_layers: 3
+  dim_feedforward: 16
+  reduced_dim: 4
+
+training:
+  batch_size: 128
+  epochs: 500
+  learning_rate: 0.001
+  optimizer: "Adam"
+  train_ratio: 0.8
+  random_seed: 42

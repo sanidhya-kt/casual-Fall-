@@ -1,0 +1,25 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment & IDE
+.venv/
+env/
+venv/
+.DS_Store
+.idea/
+.vscode/
+
+# Large checkpoints (keep directory structure)
+checkpoints/*.pt
+!checkpoints/.gitkeep
+results/*.pt
+!results/.gitkeep
+
+# Raw multi-gigabyte datasets (preprocessed 25Hz cache in data/cache/ is committed)
+datasets/raw/
+
+# Logs
+*.log
