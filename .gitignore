@@ -26,3 +26,4 @@ datasets/raw/
 
 # Local paper extraction cache
 .tmp_pypdf/
+reports/_paper_extract.txt
