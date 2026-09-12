@@ -2,8 +2,8 @@
 # CausalFall GPU runner for SisFall and KFall.
 #
 # Safe defaults:
-#   ./run_on_server.sh                 # both datasets, sequentially
-#   ./run_on_server.sh --parallel      # both datasets, at most two jobs
+#   ./run_on_server.sh                 # SisFall first, then KFall
+#   ./run_on_server.sh --parallel      # optional parallel mode
 #   ./run_on_server.sh sisfall         # one dataset
 
 set -uo pipefail
@@ -182,6 +182,7 @@ if (( PARALLEL == 1 )) && ((${#DATASETS[@]} > 1)); then
         wait "$pid" || overall_code=1
     done
 else
+    echo "Execution order: SisFall -> KFall; each dataset must finish before the next starts."
     overall_code=0
     for dataset in "${DATASETS[@]}"; do
         run_dataset "$dataset" || overall_code=1
