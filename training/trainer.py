@@ -24,6 +24,7 @@ class Trainer:
         model: torch.nn.Module,
         train_loader: DataLoader,
         test_loader: DataLoader,
+        val_loader: Optional[DataLoader] = None,
         learning_rate: float = 1e-3,
         epochs: int = 500,
         device: str = "auto",
@@ -43,6 +44,7 @@ class Trainer:
         self.model = model.to(self.device)
         self.train_loader = train_loader
         self.test_loader = test_loader
+        self.val_loader = val_loader
         self.epochs = epochs
         self.is_causalfall = is_causalfall
         self.checkpoint_dir = checkpoint_dir
@@ -95,12 +97,13 @@ class Trainer:
         }
 
     @torch.no_grad()
-    def evaluate(self) -> Dict[str, float]:
+    def evaluate(self, data_loader: Optional[DataLoader] = None) -> Dict[str, Any]:
         self.model.eval()
         all_preds = []
         all_targets = []
         
-        for batch_x, batch_y in self.test_loader:
+        loader = data_loader or self.test_loader
+        for batch_x, batch_y in loader:
             batch_x = batch_x.to(self.device)
             
             if self.is_causalfall:
@@ -116,6 +119,12 @@ class Trainer:
             all_targets.extend(batch_y.numpy())
             
         metrics = compute_metrics(np.array(all_targets), np.array(all_preds))
+        metrics['confusion_matrix'] = np.array([
+            [int(np.sum((np.array(all_targets) == 0) & (np.array(all_preds) == 0))),
+             int(np.sum((np.array(all_targets) == 0) & (np.array(all_preds) == 1)))],
+            [int(np.sum((np.array(all_targets) == 1) & (np.array(all_preds) == 0))),
+             int(np.sum((np.array(all_targets) == 1) & (np.array(all_preds) == 1)))]
+        ])
         return metrics
 
     def train(self, verbose: bool = True) -> Dict[str, Any]:
@@ -125,7 +134,7 @@ class Trainer:
         
         for epoch in range(1, self.epochs + 1):
             train_losses = self.train_epoch()
-            eval_metrics = self.evaluate()
+            eval_metrics = self.evaluate(self.val_loader or self.test_loader)
             
             history.append({
                 'epoch': epoch,
@@ -148,8 +157,15 @@ class Trainer:
                     f"F1: {eval_metrics['F1-Score']:.2f}%"
                 )
                 
+        final_test_metrics = self.evaluate(self.test_loader)
         return {
             'best_metrics': best_metrics,
-            'final_metrics': eval_metrics,
+            'best_validation_metrics': best_metrics,
+            'final_metrics': final_test_metrics,
+            'final_test_metrics': final_test_metrics,
+            'best_epoch': next(
+                (entry['epoch'] for entry in history if entry['F1-Score'] == best_f1),
+                None
+            ),
             'history': history
         }

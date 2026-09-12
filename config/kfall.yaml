@@ -23,5 +23,12 @@ training:
   epochs: 500
   learning_rate: 0.001
   optimizer: "Adam"
-  train_ratio: 0.8
+  train_ratio: 0.64
+  val_ratio: 0.16
+  split_mode: "file"
+  normalize: true
   random_seed: 42
+
+causal:
+  max_lag: 5
+  threshold: 1.0

@@ -9,7 +9,7 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from data.sisfall_loader import SisFallLoader
 from data.kfall_loader import KFallLoader
-from data.dataset import create_train_test_split
+from data.dataset import create_train_val_test_split
 from causal.granger_causality import compute_causal_matrix
 from models.causalfall import CausalFall
 from training.trainer import Trainer
@@ -27,14 +27,25 @@ def run_ablations(config_path: str, data_override_dir: str = None, epochs_overri
     batch_size = cfg.get('training', {}).get('batch_size', 128)
     lr = cfg.get('training', {}).get('learning_rate', 1e-3)
     train_ratio = cfg.get('training', {}).get('train_ratio', 0.8)
+    val_ratio = cfg.get('training', {}).get('val_ratio', 0.16)
     random_seed = cfg.get('training', {}).get('random_seed', 42)
+    split_mode = cfg.get('training', {}).get('split_mode', 'file')
+    normalize = cfg.get('training', {}).get('normalize', True)
+    max_lag = cfg.get('causal', {}).get('max_lag', 5)
+    causal_threshold = cfg.get('causal', {}).get('threshold', 1.0)
     
     cache_path = f"./data/cache/{dataset_name.lower()}_preprocessed.npz"
     if os.path.exists(cache_path):
         print(f"Loading preprocessed dataset from cache: {cache_path}")
-        from data.dataset import load_preprocessed_dataset
-        train_ds, test_ds, normalizer, train_impacts, train_falls = load_preprocessed_dataset(
-            cache_path, train_ratio=train_ratio, random_seed=random_seed, normalize=True
+        data = np.load(cache_path, allow_pickle=True)
+        labels = data['y']
+        impact = data['impact']
+        impact_list = [impact[i] if labels[i] == 1 else None for i in range(len(labels))]
+        train_ds, val_ds, test_ds, normalizer, train_impacts, train_falls, _ = create_train_val_test_split(
+            data['X'], labels, impact_list,
+            meta_list=data['meta'].tolist() if 'meta' in data else None,
+            train_ratio=train_ratio, val_ratio=val_ratio,
+            random_seed=random_seed, normalize=normalize, split_mode=split_mode
         )
     else:
         if dataset_name.lower() == 'sisfall':
@@ -47,14 +58,19 @@ def run_ablations(config_path: str, data_override_dir: str = None, epochs_overri
             return None
             
         X_list, y_list, impact_list, meta_list = loader.load_dataset()
-        train_ds, test_ds, normalizer, train_impacts, train_falls = create_train_test_split(
-            X_list, y_list, impact_list, train_ratio=train_ratio, random_seed=random_seed
+        train_ds, val_ds, test_ds, normalizer, train_impacts, train_falls, _ = create_train_val_test_split(
+            X_list, y_list, impact_list, meta_list=meta_list,
+            train_ratio=train_ratio, val_ratio=val_ratio,
+            random_seed=random_seed, normalize=normalize, split_mode=split_mode
         )
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
     
     if train_falls is not None and train_impacts is not None and len(train_falls) > 0:
-        _, channel_weights = compute_causal_matrix(train_falls, train_impacts, max_lag=5, threshold=1.0)
+        _, channel_weights = compute_causal_matrix(
+            train_falls, train_impacts, max_lag=max_lag, threshold=causal_threshold
+        )
     else:
         channel_weights = np.ones(9) / 9.0
         
@@ -84,6 +100,7 @@ def run_ablations(config_path: str, data_override_dir: str = None, epochs_overri
             model=model,
             train_loader=train_loader,
             test_loader=test_loader,
+            val_loader=val_loader,
             learning_rate=lr,
             epochs=epochs,
             checkpoint_dir=f"./checkpoints/{dataset_name}_ablation_mask_{strat}",
@@ -116,6 +133,7 @@ def run_ablations(config_path: str, data_override_dir: str = None, epochs_overri
             model=model,
             train_loader=train_loader,
             test_loader=test_loader,
+            val_loader=val_loader,
             learning_rate=lr,
             epochs=epochs,
             checkpoint_dir=f"./checkpoints/{dataset_name}_ablation_{tag}",

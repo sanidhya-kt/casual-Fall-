@@ -17,11 +17,14 @@ training:
   learning_rate: 0.001     # [PAPER SPECIFICATION] Sec 5.2.3: 1e-3
   optimizer: "Adam"        # [PAPER SPECIFICATION] Sec 5.2.3: Adam
   random_seed: 42
-  train_ratio: 0.8         # 80/20 train/test split
+  train_ratio: 0.64        # 64/16/20 train/validation/test split
+  val_ratio: 0.16
+  split_mode: "file"       # file, window, or subject
+  normalize: true          # [REPLICATION-ASSUMPTION] train-only channel z-score
   device: "auto"           # auto-selects cuda, mps, or cpu
 
 causal:
-  max_lag: 15              # lag order <= theta = 15
+  max_lag: 5               # [REPLICATION-ASSUMPTION] paper does not specify one lag
   threshold: 1.0           # E = M_GC if M_GC > 1.0 else 0
 
 counterfactual:

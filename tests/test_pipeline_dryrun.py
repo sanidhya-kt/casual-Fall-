@@ -9,6 +9,7 @@ from data.dataset import FallDataset, create_train_test_split
 from causal.granger_causality import compute_causal_matrix
 from models.causalfall import CausalFall
 from training.trainer import Trainer
+from data.dataset import create_train_val_test_split
 
 def test_dryrun_pipeline():
     print("Testing end-to-end training and evaluation dry run...")
@@ -68,5 +69,27 @@ def test_dryrun_pipeline():
     assert 'Accuracy' in metrics and 'F1-Score' in metrics
     print("[PASS] test_dryrun_pipeline passed successfully.")
 
+def test_group_split_has_no_leakage():
+    X_list = [np.full((9, 72), float(i), dtype=np.float32) for i in range(12)]
+    y_list = [i % 2 for i in range(12)]
+    impact_list = [np.zeros((9, 72), dtype=np.float32) if y else None for y in y_list]
+    meta_list = [f"SA{i // 2 + 1:02d}T01R{i % 2 + 1:02d}.csv" for i in range(12)]
+
+    train_ds, val_ds, test_ds, normalizer, _, _, metadata = create_train_val_test_split(
+        X_list, y_list, impact_list, meta_list=meta_list,
+        train_ratio=0.5, val_ratio=0.25, random_seed=42,
+        normalize=True, split_mode="subject"
+    )
+
+    assert len(train_ds) + len(val_ds) + len(test_ds) == len(X_list)
+    assert metadata["group_overlap"] == {
+        "train_val_groups": 0,
+        "train_test_groups": 0,
+        "val_test_groups": 0,
+    }
+    assert normalizer is not None
+    print("[PASS] test_group_split_has_no_leakage passed successfully.")
+
 if __name__ == '__main__':
     test_dryrun_pipeline()
+    test_group_split_has_no_leakage()

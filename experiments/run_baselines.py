@@ -9,7 +9,7 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from data.sisfall_loader import SisFallLoader
 from data.kfall_loader import KFallLoader
-from data.dataset import create_train_test_split
+from data.dataset import create_train_val_test_split
 from baselines import (
     CNNBaseline,
     LSTMBaseline,
@@ -33,14 +33,23 @@ def run_all_baselines(config_path: str, data_override_dir: str = None, epochs_ov
     batch_size = cfg.get('training', {}).get('batch_size', 128)
     lr = cfg.get('training', {}).get('learning_rate', 1e-3)
     train_ratio = cfg.get('training', {}).get('train_ratio', 0.8)
+    val_ratio = cfg.get('training', {}).get('val_ratio', 0.16)
     random_seed = cfg.get('training', {}).get('random_seed', 42)
+    split_mode = cfg.get('training', {}).get('split_mode', 'file')
+    normalize = cfg.get('training', {}).get('normalize', True)
     
     cache_path = f"./data/cache/{dataset_name.lower()}_preprocessed.npz"
     if os.path.exists(cache_path):
         print(f"Loading preprocessed dataset from cache: {cache_path}")
-        from data.dataset import load_preprocessed_dataset
-        train_ds, test_ds, normalizer, _, _ = load_preprocessed_dataset(
-            cache_path, train_ratio=train_ratio, random_seed=random_seed, normalize=True
+        data = np.load(cache_path, allow_pickle=True)
+        labels = data['y']
+        impact = data['impact']
+        impact_list = [impact[i] if labels[i] == 1 else None for i in range(len(labels))]
+        train_ds, val_ds, test_ds, normalizer, _, _, _ = create_train_val_test_split(
+            data['X'], labels, impact_list,
+            meta_list=data['meta'].tolist() if 'meta' in data else None,
+            train_ratio=train_ratio, val_ratio=val_ratio,
+            random_seed=random_seed, normalize=normalize, split_mode=split_mode
         )
     else:
         # 1. Load dataset
@@ -54,10 +63,13 @@ def run_all_baselines(config_path: str, data_override_dir: str = None, epochs_ov
             return None
             
         X_list, y_list, impact_list, meta_list = loader.load_dataset()
-        train_ds, test_ds, normalizer, _, _ = create_train_test_split(
-            X_list, y_list, impact_list, train_ratio=train_ratio, random_seed=random_seed
+        train_ds, val_ds, test_ds, normalizer, _, _, _ = create_train_val_test_split(
+            X_list, y_list, impact_list, meta_list=meta_list,
+            train_ratio=train_ratio, val_ratio=val_ratio,
+            random_seed=random_seed, normalize=normalize, split_mode=split_mode
         )
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
     
     baselines = {
@@ -78,6 +90,7 @@ def run_all_baselines(config_path: str, data_override_dir: str = None, epochs_ov
             model=model,
             train_loader=train_loader,
             test_loader=test_loader,
+            val_loader=val_loader,
             learning_rate=lr,
             epochs=epochs,
             checkpoint_dir=f"./checkpoints/{dataset_name}_{name.lower()}",
