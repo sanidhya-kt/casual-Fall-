@@ -6,7 +6,7 @@
 #   ./run_on_server.sh --parallel      # optional parallel mode
 #   ./run_on_server.sh sisfall         # one dataset
 
-set -uo pipefail
+set -Eeuo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cd "$ROOT_DIR" || exit 1
@@ -129,7 +129,7 @@ run_dataset() {
     local code=0
 
     (
-        set -uo pipefail
+        set -Eeuo pipefail
         exec > >(tee -a "$log_file") 2>&1
         trap 'echo "[$(date "+%F %T")] INTERRUPTED" >&2; exit 130' INT TERM
 
@@ -146,15 +146,15 @@ run_dataset() {
         export MKL_NUM_THREADS="${MKL_NUM_THREADS:-8}"
 
         if [[ ! -f "$ROOT_DIR/data/cache/${dataset}_preprocessed.npz" ]]; then
-            run_python_step "$dataset cache build" preprocessing/build_cache.py --dataset "$dataset" || exit $?
+                run_python_step "$dataset cache build" preprocessing/build_cache.py --dataset "$dataset"
         fi
 
         build_args "$dataset"
-        run_python_step "$dataset main model" experiments/run_main.py "${RUN_ARGS[@]}" || exit $?
+        run_python_step "$dataset main model" experiments/run_main.py "${RUN_ARGS[@]}"
 
         if (( MAIN_ONLY == 0 )); then
-            run_python_step "$dataset baselines" experiments/run_baselines.py "${RUN_ARGS[@]}" || exit $?
-            run_python_step "$dataset ablations" experiments/run_ablations.py "${RUN_ARGS[@]}" || exit $?
+            run_python_step "$dataset baselines" experiments/run_baselines.py "${RUN_ARGS[@]}"
+            run_python_step "$dataset ablations" experiments/run_ablations.py "${RUN_ARGS[@]}"
         fi
 
         echo "[$(date '+%F %T')] COMPLETED $dataset"
@@ -179,13 +179,23 @@ if (( PARALLEL == 1 )) && ((${#DATASETS[@]} > 1)); then
     done
     overall_code=0
     for pid in "${PIDS[@]}"; do
-        wait "$pid" || overall_code=1
+        if ! wait "$pid"; then
+            overall_code=1
+            for other_pid in "${PIDS[@]}"; do
+                [[ "$other_pid" == "$pid" ]] || kill "$other_pid" 2>/dev/null || true
+            done
+            break
+        fi
     done
 else
     echo "Execution order: SisFall -> KFall; each dataset must finish before the next starts."
     overall_code=0
     for dataset in "${DATASETS[@]}"; do
-        run_dataset "$dataset" || overall_code=1
+        if ! run_dataset "$dataset"; then
+            overall_code=1
+            echo "A dataset failed; stopping immediately. KFall will not start after a SisFall failure." >&2
+            break
+        fi
     done
 fi
 
